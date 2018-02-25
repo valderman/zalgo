@@ -2,22 +2,23 @@
 --   text through horrifying abuse of diacritics.
 module Text.Zalgo
   ( -- * Pure interface
-    zalgo, zalgoWith, gradualZalgo, unZalgo
+    zalgo, zalgoWith, gradualZalgo, unZalgoWith, redact
 
     -- * Effectful interface
-  , zalgoIO, zalgoIOWith, gradualZalgoIO, gradualZalgoIOWith
+  , zalgoIO, zalgoIOWith, gradualZalgoIO, gradualZalgoIOWith, redactIO
 
     -- * Printing functions
-  , printZalgo, printZalgoWith, printGradualZalgo
+  , printZalgo, printZalgoWith, printGradualZalgo, printRedacted
 
     -- * Configuration
   , ZalgoSettings
   , maxHeightAt, varianceAt, overlayProbabilityAt
-  , defaultZalgoSettings
+  , numOverlayCharsAt, overlayCharset
+  , defaultZalgoSettings, unreadableZalgoSettings
   ) where
 import Data.Array (Array, listArray, bounds, elems, (!))
 import Data.Char (chr)
-import Data.List (foldl')
+import Data.List (foldl', isPrefixOf)
 import System.Random (RandomGen, StdGen, newStdGen, randomR, randomRs, split)
 
 -- TODO: sporadically zalgo a text using Perlin noise
@@ -40,6 +41,18 @@ data ZalgoSettings = ZalgoSettings
     --
     --   Default: const 0.4
   , overlayProbabilityAt :: Int -> Double
+
+    -- | Number of characters to use for overlay at the given position of the
+    --   input string. The number of overlays for any character will always be
+    --   this number or zero.
+    --
+    --   Default: const 1
+  , numOverlayCharsAt :: Int -> Int
+
+    -- | Charset from which to pick overlay characters.
+    --
+    --   Default: 'defaultOverlayCharset'
+  , overlayCharset :: Array Int Char
   }
 
 -- | The default zalgo settings. Creepy yet readable.
@@ -48,6 +61,16 @@ defaultZalgoSettings = ZalgoSettings
   { maxHeightAt          = const 10
   , varianceAt           = const 1
   , overlayProbabilityAt = const 0.4
+  , numOverlayCharsAt    = const 1
+  , overlayCharset       = defaultOverlayCharset
+  }
+
+-- | Settings to make text completely unreadable.
+unreadableZalgoSettings :: ZalgoSettings
+unreadableZalgoSettings = defaultZalgoSettings
+  { overlayProbabilityAt = const 1
+  , numOverlayCharsAt    = const 7
+  , overlayCharset       = redactionOverlayCharset
   }
 
 minHeightAt :: ZalgoSettings -> Int -> Int
@@ -69,10 +92,16 @@ over = listArray (0, length list-1) list
       ]
 
 -- | Overlaid diacritics.
-overlay :: Array Int Char
-overlay = listArray (0, length list-1) list
+defaultOverlayCharset :: Array Int Char
+defaultOverlayCharset = listArray (0, length list-1) list
   where
-    list = map chr [820 .. 824]
+    list = map chr $ [820 .. 824]
+
+-- | Overlaid and enclosing diacritics, to make text absolutely unreadable.
+redactionOverlayCharset :: Array Int Char
+redactionOverlayCharset = listArray (0, length list-1) list
+  where
+    list = map chr $ [820 .. 824] ++ [0x488, 0x489, 0x20dd, 0x20de, 0x20df, 0x20e4]
 
 -- | Combining diacritics below.
 under :: Array Int Char
@@ -99,11 +128,11 @@ combiners source numRange g =
 -- | Combine a character with over, under and overlay characters.
 --   At most one overlay character is chosen, with probability @overlayProb@.
 --   The numbers of top and bottom characters are drawn from the given interval.
-combineAll :: RandomGen g => Double -> (Int, Int) -> Char -> g -> (g, String)
-combineAll overlayProb numRange c gen
+combineAll :: RandomGen g => Double -> (Int, Int) -> Int -> Array Int Char -> Char -> g -> (g, String)
+combineAll overlayProb numRange ovrs overlay c gen
   | o <= overlayProb =
     case marks of
-      (g, marks') -> fmap ((c:marks')++) (combiners overlay (1, 1) g)
+      (g, marks') -> fmap ((c:marks')++) (combiners overlay (ovrs, ovrs) g)
   | otherwise =
     fmap (c:) marks
   where
@@ -111,20 +140,71 @@ combineAll overlayProb numRange c gen
     marks = foldl' f (gen', "") [over, under]
     f (g, s') src = fmap (s'++) (combiners src numRange g)
 
+-- | Break the second given string on the first occurrence of the first
+--   (the "needle").
+--   The first element of the returned pair is the string up until the needle,
+--   and the second is the string after it.
+--   The needle itself is not included in either.
+--   If the needle is not found, the first element will be the input string and
+--   the second will be empty.
+break1 :: Eq a => [a] -> [a] -> ([a], [a])
+break1 [] xs     = (xs, [])
+break1 needle xs = go [] xs
+  where
+    go pre [] =
+        (reverse pre, [])
+    go pre xs
+      | needle `isPrefixOf` xs =
+        (reverse pre, drop (length needle) xs)
+      | otherwise =
+        go (head xs:pre) (tail xs)
 
--- | Exorcise Zalgo from the given string.
+-- | Break the second string on each occurrence of first (the "needle").
+--   The returned list will contain the needle interspersed between non-needle
+--   segments so that `forall needle xs. concat (breakAll needle xs) == id`.
+breakAll :: Eq a => [a] -> [a] -> [[a]]
+breakAll needle xs =
+  case break1 needle xs of
+    (_, [])    -> [xs]
+    ([], xs')  -> needle : breakAll needle xs'
+    (pre, xs') -> pre : needle : breakAll needle xs'
+
+-- | Blot out any occurrence of the given needles in the given string using
+--   extreme zalgo.
+redact :: RandomGen g => [String] -> String -> g -> (g, String)
+redact needles haystack gen = foldl' f (gen, haystack) needles
+  where
+    f (g, xs) needle = redact' needle g (breakAll needle xs)
+
+    redact' needle g (x:xs)
+      | needle == x =
+        case zalgoWith unreadableZalgoSettings x g of
+          (g', x') -> fmap (x'++) (redact' needle g' xs)
+      | otherwise =
+        fmap (x++) (redact' needle g xs)
+    redact' _ g _ =
+      (g, "")
+
+-- | Exorcise Zalgo from the given string using the given settings.
+unZalgoWith :: ZalgoSettings -> String -> String
+unZalgoWith cfg =
+  filter (not . (`elem` concat [elems over, elems under, elems (overlayCharset cfg)]))
+
+-- | Exorcise Zalgo from the given string using the default settings.
 unZalgo :: String -> String
-unZalgo = filter (not . (`elem` concat [elems over, elems under, elems overlay]))
+unZalgo = unZalgoWith defaultZalgoSettings
 
 -- | Zalgo the given text, using the given algorithm settings and generator.
 zalgoWith :: RandomGen g => ZalgoSettings -> String -> g -> (g, String)
 zalgoWith cfg s g0 = fmap (concat . reverse) $ snd $ foldl' f (0, (g0, [])) s
   where
-    f (n, (g, s')) c = (n+1, fmap (:s') (combineAll o (lo, hi) c g))
+    f (n, (g, s')) c = (n+1, fmap (:s') (combineAll o (lo, hi) novrs ovrs c g))
       where
         hi = maxHeightAt cfg n
         lo = minHeightAt cfg n
         o = overlayProbabilityAt cfg n
+        novrs = numOverlayCharsAt cfg n
+        ovrs = overlayCharset cfg
 
 -- | Zalgo the given text using the default zalgo settings and the given
 --   generator.
@@ -178,6 +258,12 @@ zalgoIOWith cfg s = do
   g <- newStdGen
   return $ snd $ zalgoWith cfg s g
 
+-- | Like 'redact', but with a fresh random generator.
+redactIO :: [String] -> String -> IO String
+redactIO needles s = do
+  g <- newStdGen
+  return $ snd $ redact needles s g
+
 -- | Zalgo the given text using the standard settings and a fresh generator.
 zalgoIO :: String -> IO String
 zalgoIO = zalgoIOWith defaultZalgoSettings
@@ -213,3 +299,7 @@ printZalgo = printZalgoWith defaultZalgoSettings
 --   Uses default settings and a fresh system default generator.
 printGradualZalgo :: Double -> String -> IO ()
 printGradualZalgo from s = gradualZalgoIO from s >>= putStrLn
+
+-- | 'redact' and print the given needles and haystack.
+printRedacted :: [String] -> String -> IO ()
+printRedacted needles s = redactIO needles s >>= putStrLn
