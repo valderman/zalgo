@@ -5,7 +5,7 @@ module Text.Zalgo
     zalgo, zalgoWith, gradualZalgo, unZalgo
 
     -- * Effectful interface
-  , zalgoIO, zalgoIOWith, gradualZalgoIOWith
+  , zalgoIO, zalgoIOWith, gradualZalgoIO, gradualZalgoIOWith
 
     -- * Printing functions
   , printZalgo, printZalgoWith, printGradualZalgo
