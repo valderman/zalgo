@@ -1,16 +1,16 @@
 -- | Provides facilities for generating a wide range of glitched/creepy
 --   text through horrifying abuse of diacritics.
-module Text.Zalgo (
-  -- * Pure interface
-  zalgo, zalgoWith, gradualZalgo, unZalgo
+module Text.Zalgo
+  ( -- * Pure interface
+    zalgo, zalgoWith, gradualZalgo, unZalgo
 
-  -- * Effectful interface
+    -- * Effectful interface
   , zalgoIO, zalgoIOWith, gradualZalgoIOWith
 
-  -- * Printing functions
+    -- * Printing functions
   , printZalgo, printZalgoWith, printGradualZalgo
 
-  -- * Configuration
+    -- * Configuration
   , ZalgoSettings
   , maxHeightAt, varianceAt, overlayProbabilityAt
   , defaultZalgoSettings
