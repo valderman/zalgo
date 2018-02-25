@@ -19,7 +19,7 @@ module Text.Zalgo
   ) where
 import Data.Array (Array, listArray, bounds, elems, (!))
 import Data.Char (ord, chr)
-import Data.List (foldl', isPrefixOf)
+import Data.List (foldl', isSuffixOf, isPrefixOf)
 import System.Random (RandomGen, StdGen, newStdGen, randomR, randomRs, split)
 
 -- TODO: sporadically zalgo a text using Perlin noise
@@ -159,9 +159,12 @@ break1 needle xs = go [] xs
 breakAll :: Eq a => [a] -> [a] -> [[a]]
 breakAll needle xs =
   case break1 needle xs of
-    (_, [])    -> [xs]
-    ([], xs')  -> needle : breakAll needle xs'
-    (pre, xs') -> pre : needle : breakAll needle xs'
+    (_, []) | not (needle `isSuffixOf` xs) ->
+      [xs]
+    ([], xs') ->
+      needle : breakAll needle xs'
+    (pre, xs') ->
+      pre : needle : breakAll needle xs'
 
 -- | Blot out any occurrence of the given needles in the given string using
 --   extreme zalgo.
