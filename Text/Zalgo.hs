@@ -28,7 +28,7 @@ data ZalgoSettings = ZalgoSettings
   { -- | Maximum number of diacritics above or below a character at the
     --   given position of the input string.
     --
-    --   Default: const 10
+    --   Default: const 5
     maxHeightAt :: Int -> Int
 
     -- | Maximum random variance in height, as a fraction of 'maxHeight', at
@@ -59,7 +59,7 @@ data ZalgoSettings = ZalgoSettings
 -- | The default zalgo settings. Creepy yet readable.
 defaultZalgoSettings :: ZalgoSettings
 defaultZalgoSettings = ZalgoSettings
-  { maxHeightAt          = const 10
+  { maxHeightAt          = const 5
   , varianceAt           = const 1
   , overlayProbabilityAt = const 0.4
   , numOverlayCharsAt    = const 1
