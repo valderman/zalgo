@@ -16,6 +16,7 @@ module Text.Zalgo (
   , defaultZalgoSettings
   ) where
 import Data.Char (chr)
+import Data.List (foldl')
 import System.Random (RandomGen, StdGen, newStdGen, randomR, randomRs, split)
 
 -- TODO: sporadically zalgo a text using Perlin noise
@@ -99,8 +100,8 @@ combineAll overlayProb numRange c gen
   | otherwise              = fmap (c:) marks
   where
     (o, gen') = randomR (0, 1) gen
-    marks = foldr f (gen', "") [over, under]
-    f src (g, s') = fmap (s'++) (combiners src numRange g)
+    marks = foldl' f (gen', "") [over, under]
+    f (g, s') src = fmap (s'++) (combiners src numRange g)
 
 
 -- | Exorcise Zalgo from the given string.
@@ -109,9 +110,9 @@ unZalgo = filter (not . (`elem` concat [over, under, overlay]))
 
 -- | Zalgo the given text, using the given algorithm settings and generator.
 zalgoWith :: RandomGen g => ZalgoSettings -> String -> g -> (g, String)
-zalgoWith cfg s g0 = snd $ foldr f (length s-1, (g0, "")) s
+zalgoWith cfg s g0 = fmap (concat . reverse) $ snd $ foldl' f (0, (g0, [])) s
   where
-    f c (n, (g, s')) = (n-1, fmap (++ s') (combineAll o (lo, hi) c g))
+    f (n, (g, s')) c = (n+1, fmap (:s') (combineAll o (lo, hi) c g))
       where
         hi = maxHeightAt cfg n
         lo = minHeightAt cfg n
