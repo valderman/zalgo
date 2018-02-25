@@ -15,9 +15,10 @@ module Text.Zalgo
   , maxHeightAt, varianceAt, overlayProbabilityAt
   , numOverlayCharsAt, overlayCharset
   , defaultZalgoSettings, unreadableZalgoSettings
+  , defaultOverlayCharset
   ) where
 import Data.Array (Array, listArray, bounds, elems, (!))
-import Data.Char (chr)
+import Data.Char (ord, chr)
 import Data.List (foldl', isPrefixOf)
 import System.Random (RandomGen, StdGen, newStdGen, randomR, randomRs, split)
 
@@ -70,7 +71,6 @@ unreadableZalgoSettings :: ZalgoSettings
 unreadableZalgoSettings = defaultZalgoSettings
   { overlayProbabilityAt = const 1
   , numOverlayCharsAt    = const 7
-  , overlayCharset       = redactionOverlayCharset
   }
 
 minHeightAt :: ZalgoSettings -> Int -> Int
@@ -96,12 +96,6 @@ defaultOverlayCharset :: Array Int Char
 defaultOverlayCharset = listArray (0, length list-1) list
   where
     list = map chr $ [820 .. 824]
-
--- | Overlaid and enclosing diacritics, to make text absolutely unreadable.
-redactionOverlayCharset :: Array Int Char
-redactionOverlayCharset = listArray (0, length list-1) list
-  where
-    list = map chr $ [820 .. 824] ++ [0x488, 0x489, 0x20dd, 0x20de, 0x20df, 0x20e4]
 
 -- | Combining diacritics below.
 under :: Array Int Char
@@ -175,10 +169,11 @@ redact :: RandomGen g => [String] -> String -> g -> (g, String)
 redact needles haystack gen = foldl' f (gen, haystack) needles
   where
     f (g, xs) needle = redact' needle g (breakAll needle xs)
+    rot13 c = chr $ (ord c + 13 - 97) `mod` 26 + 97
 
     redact' needle g (x:xs)
       | needle == x =
-        case zalgoWith unreadableZalgoSettings x g of
+        case zalgoWith unreadableZalgoSettings (map rot13 x) g of
           (g', x') -> fmap (x'++) (redact' needle g' xs)
       | otherwise =
         fmap (x++) (redact' needle g xs)
