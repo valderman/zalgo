@@ -97,7 +97,8 @@ combineAll overlayProb numRange c gen
   | o <= overlayProb =
     case marks of
       (g, marks') -> fmap ((c:marks')++) (combiners overlay (1, 1) g)
-  | otherwise              = fmap (c:) marks
+  | otherwise =
+    fmap (c:) marks
   where
     (o, gen') = randomR (0, 1) gen
     marks = foldl' f (gen', "") [over, under]
