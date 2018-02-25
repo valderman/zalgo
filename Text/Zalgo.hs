@@ -40,7 +40,7 @@ data ZalgoSettings = ZalgoSettings
     -- | Probability of generating an overlay character at the given position
     --   of the input string.
     --
-    --   Default: const 0.4
+    --   Default: const 0.6
   , overlayProbabilityAt :: Int -> Double
 
     -- | Number of characters to use for overlay at the given position of the
@@ -61,7 +61,7 @@ defaultZalgoSettings :: ZalgoSettings
 defaultZalgoSettings = ZalgoSettings
   { maxHeightAt          = const 5
   , varianceAt           = const 1
-  , overlayProbabilityAt = const 0.4
+  , overlayProbabilityAt = const 0.6
   , numOverlayCharsAt    = const 1
   , overlayCharset       = defaultOverlayCharset
   }
