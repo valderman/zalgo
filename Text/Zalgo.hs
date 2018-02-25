@@ -15,6 +15,7 @@ module Text.Zalgo
   , maxHeightAt, varianceAt, overlayProbabilityAt
   , defaultZalgoSettings
   ) where
+import Data.Array (Array, listArray, bounds, elems, (!))
 import Data.Char (chr)
 import Data.List (foldl')
 import System.Random (RandomGen, StdGen, newStdGen, randomR, randomRs, split)
@@ -55,39 +56,45 @@ minHeightAt cfg n = floor $ maxH - maxH * varianceAt cfg n
     maxH = fromIntegral (maxHeightAt cfg n)
 
 -- | Combining diacritics above.
-over :: [Char]
-over = map chr $ concat
-  [ [768 .. 789]
-  , [829 .. 836]
-  , [842 .. 844]
-  , [848 .. 850]
-  , [867 .. 879] -- latin letters
-  , [794, 795, 836, 838, 855, 856, 859, 861, 862, 864, 865]
-  ]
+over :: Array Int Char
+over = listArray (0, length list-1) list
+  where
+    list = map chr $ concat
+      [ [768 .. 789]
+      , [829 .. 836]
+      , [842 .. 844]
+      , [848 .. 850]
+      , [867 .. 879] -- latin letters
+      , [794, 795, 836, 838, 855, 856, 859, 861, 862, 864, 865]
+      ]
 
 -- | Overlaid diacritics.
-overlay :: [Char]
-overlay = map chr [820 .. 824]
+overlay :: Array Int Char
+overlay = listArray (0, length list-1) list
+  where
+    list = map chr [820 .. 824]
 
 -- | Combining diacritics below.
-under :: [Char]
-under = map chr $ concat
-  [ [x | x <- [790 .. 819], not $ x `elem` [794, 795]]
-  , [825 .. 828]
-  , [839 .. 841]
-  , [851 .. 854]
-  , [837, 845, 846, 857, 858, 860, 863]
-  ]
+under :: Array Int Char
+under = listArray (0, length list-1) list
+  where
+    list = map chr $ concat
+      [ [x | x <- [790 .. 819], not $ x `elem` [794, 795]]
+      , [825 .. 828]
+      , [839 .. 841]
+      , [851 .. 854]
+      , [837, 845, 846, 857, 858, 860, 863]
+      ]
 
 -- | Choose n characters from the given list, where n is chosen at random
 --   in the given interval.
-combiners :: RandomGen g => [Char] -> (Int, Int) -> g -> (g, [Char])
+combiners :: RandomGen g => Array Int Char -> (Int, Int) -> g -> (g, [Char])
 combiners source numRange g =
-    (g1, take numMarks $ map (source !!) indices)
+    (g1, take numMarks $ map (source !) indices)
   where
     (g0, g1) = split g
     (numMarks, g0') = randomR numRange g0
-    indices = randomRs (0, length source-1) g0'
+    indices = randomRs (bounds source) g0'
 
 -- | Combine a character with over, under and overlay characters.
 --   At most one overlay character is chosen, with probability @overlayProb@.
@@ -107,7 +114,7 @@ combineAll overlayProb numRange c gen
 
 -- | Exorcise Zalgo from the given string.
 unZalgo :: String -> String
-unZalgo = filter (not . (`elem` concat [over, under, overlay]))
+unZalgo = filter (not . (`elem` concat [elems over, elems under, elems overlay]))
 
 -- | Zalgo the given text, using the given algorithm settings and generator.
 zalgoWith :: RandomGen g => ZalgoSettings -> String -> g -> (g, String)
